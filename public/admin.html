@@ -358,6 +358,16 @@
             </div>
         </div>
 
+        <!-- NEW: File Upload Section -->
+        <div class="form-group">
+            <label>Or Attach File</label>
+            <input type="file" id="fileInput" accept=".json,.geojson" style="display: none;"
+                onchange="handleFileUpload(event)">
+            <button class="btn-secondary" onclick="document.getElementById('fileInput').click()" style="margin-top: 0;">
+                <i data-lucide="file-up" size="18"></i> Select GeoJSON File
+            </button>
+        </div>
+
         <div class="btn-group">
             <button class="btn-secondary" onclick="clearInput()">
                 <i data-lucide="trash-2" size="18"></i> Clear
@@ -373,6 +383,18 @@
     <script>
         // Initialize Lucide icons
         lucide.createIcons();
+
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                document.getElementById("geojsonInput").value = e.target.result;
+                showStatus(`✓ File "${file.name}" loaded successfully`, "success");
+            };
+            reader.readAsText(file);
+        }
 
         function clearInput() {
             document.getElementById("geojsonInput").value = "";
