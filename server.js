@@ -1,68 +1,76 @@
-import express from 'express';
-import { createServer } from 'http';
-import { Server } from 'socket.io';
-import cors from 'cors';
+import express from "express";
+import { createServer } from "http";
+import { Server } from "socket.io";
+import cors from "cors";
 
 const app = express();
 const httpServer = createServer(app);
+
 const io = new Server(httpServer, {
     cors: {
-        origin: '*', // Allow all origins for simplicity (Dev only)
-        methods: ['GET', 'POST']
+        origin: "*",
+        methods: ["GET", "POST"]
     }
 });
 
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.static('public'));
+app.use(express.json({ limit: "50mb" }));
+app.use(express.static("public"));
 
-// Route for the admin portal
-app.get('/admin', (req, res) => {
-    res.sendFile(process.cwd() + '/public/admin.html');
+app.get("/admin", (req, res) => {
+    res.sendFile(process.cwd() + "/public/admin.html");
 });
 
-let currentGeoJson = {
-    "type": "FeatureCollection",
-    "features": []
+/* ---------------- MAP LAYERS STATE ---------------- */
+
+let mapLayers = {
+    panchayat: null,
+    flood: null
 };
 
-// --- API Endpoints ---
+/* ---------------- API ---------------- */
 
-// Get current GeoJSON
-app.get('/api/geojson', (req, res) => {
-    res.json(currentGeoJson);
+app.get("/api/geojson", (req, res) => {
+    res.json(mapLayers);
 });
 
-// Update GeoJSON
-app.post('/api/geojson', (req, res) => {
-    const geojson = req.body;
+app.post("/api/geojson", (req, res) => {
 
-    if (!geojson || (geojson.type !== 'Feature' && geojson.type !== 'FeatureCollection')) {
-        return res.status(400).json({ error: 'Invalid GeoJSON format' });
+    const { layer, geojson } = req.body;
+
+    if (!layer || !geojson) {
+        return res.status(400).json({ error: "Layer and GeoJSON required" });
     }
 
-    currentGeoJson = geojson;
+    if (geojson.type !== "FeatureCollection") {
+        return res.status(400).json({ error: "Invalid GeoJSON" });
+    }
 
-    // Broadcast update to all connected clients
-    io.emit('geojson-update', currentGeoJson);
+    mapLayers[layer] = geojson;
 
-    console.log('GeoJSON updated and broadcasted');
-    res.json({ message: 'GeoJSON updated successfully' });
+    console.log(`Layer updated: ${layer}`);
+
+    io.emit("geojson-update", mapLayers);
+
+    res.json({ message: "Layer updated successfully" });
 });
 
-// Socket.io Connection
-io.on('connection', (socket) => {
-    console.log('Client connected:', socket.id);
+/* ---------------- SOCKET ---------------- */
 
-    // Send current state on connection
-    socket.emit('geojson-update', currentGeoJson);
+io.on("connection", (socket) => {
 
-    socket.on('disconnect', () => {
-        console.log('Client disconnected:', socket.id);
+    console.log("Client connected:", socket.id);
+
+    socket.emit("geojson-update", mapLayers);
+
+    socket.on("disconnect", () => {
+        console.log("Client disconnected:", socket.id);
     });
+
 });
 
 const PORT = process.env.PORT || 4000;
+
 httpServer.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });
