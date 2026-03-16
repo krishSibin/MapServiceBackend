@@ -369,8 +369,9 @@
         </div>
 
         <div class="btn-group">
-            <button class="btn-secondary" onclick="clearInput()">
-                <i data-lucide="trash-2" size="18"></i> Clear
+            <button class="btn-secondary" onclick="deleteLayer()"
+                style="border-color: var(--accent-red); color: var(--accent-red);">
+                <i data-lucide="trash-2" size="18"></i> Delete Layer
             </button>
             <button class="btn-primary" onclick="updateMap()">
                 <i data-lucide="send" size="18"></i> Push Update
@@ -400,6 +401,30 @@
             document.getElementById("geojsonInput").value = "";
             const status = document.getElementById("status");
             status.style.display = "none";
+        }
+
+        async function deleteLayer() {
+            const layer = document.getElementById("layer").value;
+            const confirmMsg = `Are you sure you want to PERMANENTLY delete the ${layer} layer from disk?`;
+
+            if (!confirm(confirmMsg)) return;
+
+            try {
+                showStatus("Deleting layer...", "success");
+
+                const response = await fetch(`/api/geojson/${layer}`, {
+                    method: "DELETE"
+                });
+
+                if (response.ok) {
+                    showStatus(`✓ ${layer} layer deleted permanently`, "success");
+                    document.getElementById("geojsonInput").value = "";
+                } else {
+                    showStatus("✕ Error deleting layer", "error");
+                }
+            } catch (err) {
+                showStatus("✕ Network error", "error");
+            }
         }
 
         async function updateMap() {
