@@ -29,15 +29,24 @@ app.get("/admin", (req, res) => {
 
 const MONGO_URI = process.env.MONGODB_URI;
 
+// Disable buffering so we get immediate errors if not connected
+mongoose.set('bufferCommands', false);
+
 if (!MONGO_URI) {
-    console.error("FATAL: MONGODB_URI is not defined in .env file");
+    console.error("FATAL: MONGODB_URI is not defined in Environment Variables");
 } else {
-    mongoose.connect(MONGO_URI)
+    console.log("Attempting to connect to MongoDB...");
+    mongoose.connect(MONGO_URI, {
+        serverSelectionTimeoutMS: 5000 // Fast fail if no connection
+    })
         .then(() => {
             console.log("✓ Connected to MongoDB Atlas");
-            syncFromDB(); // Sync after connection
+            syncFromDB();
         })
-        .catch(err => console.error("MongoDB connection error:", err));
+        .catch(err => {
+            console.error("❌ MongoDB connection error:", err.message);
+            console.error("Please check your MONGODB_URI and IP Whitelist (0.0.0.0/0)");
+        });
 }
 
 const layerSchema = new mongoose.Schema({
