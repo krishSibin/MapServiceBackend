@@ -92,7 +92,7 @@ app.post("/api/geojson", async (req, res) => {
         await Layer.findOneAndUpdate(
             { name: layer },
             { geojson: geojson },
-            { upsert: true, new: true }
+            { upsert: true, returnDocument: 'after' }
         );
 
         // Update local state and notify clients
