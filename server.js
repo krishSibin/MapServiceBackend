@@ -25,29 +25,12 @@ app.get("/admin", (req, res) => {
     res.sendFile(process.cwd() + "/public/admin.html");
 });
 
-/* ---------------- DATABASE CONFIG ---------------- */
+/* ---------------- DATABASE ---------------- */
 
 const MONGO_URI = process.env.MONGODB_URI;
+mongoose.set("bufferCommands", false);
 
-// Disable buffering so we get immediate errors if not connected
-mongoose.set('bufferCommands', false);
-
-if (!MONGO_URI) {
-    console.error("FATAL: MONGODB_URI is not defined in Environment Variables");
-} else {
-    console.log("Attempting to connect to MongoDB...");
-    mongoose.connect(MONGO_URI, {
-        serverSelectionTimeoutMS: 5000 // Fast fail if no connection
-    })
-        .then(() => {
-            console.log("✓ Connected to MongoDB Atlas");
-            syncFromDB();
-        })
-        .catch(err => {
-            console.error("❌ MongoDB connection error:", err.message);
-            console.error("Please check your MONGODB_URI and IP Whitelist (0.0.0.0/0)");
-        });
-}
+let mapLayers = {}; // ✅ dynamic
 
 const layerSchema = new mongoose.Schema({
     name: { type: String, required: true, unique: true },
@@ -56,27 +39,31 @@ const layerSchema = new mongoose.Schema({
 
 const Layer = mongoose.model("Layer", layerSchema);
 
-/* ---------------- MAP LAYERS STATE ---------------- */
-
-let mapLayers = {
-    panchayat: null,
-    flood: null
-};
-
-// Load initial data from MongoDB
 async function syncFromDB() {
     try {
         const layers = await Layer.find({});
+        mapLayers = {};
+
         layers.forEach(l => {
-            if (mapLayers.hasOwnProperty(l.name)) {
-                mapLayers[l.name] = l.geojson;
-            }
+            mapLayers[l.name] = l.geojson;
         });
-        console.log("State synchronized with MongoDB");
+
+        console.log("✅ Synced from DB");
         io.emit("geojson-update", mapLayers);
     } catch (err) {
         console.error("Sync error:", err);
     }
+}
+
+if (!MONGO_URI) {
+    console.error("❌ MONGODB_URI missing");
+} else {
+    mongoose.connect(MONGO_URI, { serverSelectionTimeoutMS: 5000 })
+        .then(() => {
+            console.log("✅ MongoDB Connected");
+            syncFromDB();
+        })
+        .catch(err => console.error(err));
 }
 
 /* ---------------- API ---------------- */
@@ -89,7 +76,7 @@ app.post("/api/geojson", async (req, res) => {
     const { layer, geojson } = req.body;
 
     if (!layer || !geojson) {
-        return res.status(400).json({ error: "Layer and GeoJSON required" });
+        return res.status(400).json({ error: "Layer & GeoJSON required" });
     }
 
     if (geojson.type !== "FeatureCollection") {
@@ -97,45 +84,34 @@ app.post("/api/geojson", async (req, res) => {
     }
 
     try {
-        // Save/Update in MongoDB
         await Layer.findOneAndUpdate(
             { name: layer },
-            { geojson: geojson },
-            { upsert: true, returnDocument: 'after' }
+            { geojson },
+            { upsert: true }
         );
 
-        // Update local state and notify clients
         mapLayers[layer] = geojson;
-        console.log(`Layer updated in DB: ${layer}`);
+
         io.emit("geojson-update", mapLayers);
 
-        res.json({ message: "Layer updated and saved to MongoDB" });
+        res.json({ message: "Updated" });
     } catch (err) {
-        console.error("DB Save error:", err);
-        res.status(500).json({ error: "Failed to save to database" });
+        res.status(500).json({ error: "DB error" });
     }
 });
 
 app.delete("/api/geojson/:layer", async (req, res) => {
     const { layer } = req.params;
 
-    if (!mapLayers.hasOwnProperty(layer)) {
-        return res.status(404).json({ error: "Layer not found" });
-    }
-
     try {
-        // Remove from MongoDB
         await Layer.findOneAndDelete({ name: layer });
+        delete mapLayers[layer];
 
-        // Update local state and notify clients
-        mapLayers[layer] = null;
-        console.log(`Layer deleted from DB: ${layer}`);
         io.emit("geojson-update", mapLayers);
 
-        res.json({ message: "Layer deleted from MongoDB" });
-    } catch (err) {
-        console.error("DB Delete error:", err);
-        res.status(500).json({ error: "Failed to delete from database" });
+        res.json({ message: "Deleted" });
+    } catch {
+        res.status(500).json({ error: "Delete failed" });
     }
 });
 
@@ -144,14 +120,9 @@ app.delete("/api/geojson/:layer", async (req, res) => {
 io.on("connection", (socket) => {
     console.log("Client connected:", socket.id);
     socket.emit("geojson-update", mapLayers);
-
-    socket.on("disconnect", () => {
-        console.log("Client disconnected:", socket.id);
-    });
 });
 
 const PORT = process.env.PORT || 4000;
-
 httpServer.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`🚀 Server running on http://localhost:${PORT}`);
 });
