@@ -347,7 +347,10 @@
                     <option value="crop">Crop Zones</option>
                     <option value="flood">Flood Risk Zones</option>
                     <option value="roads">Road Impact</option>
+                    <option value="village">Village Layer</option>
                     <option value="settlement">Settlement Areas</option>
+                    <option value="panchayat">Panchayath Boundary</option>
+                    <option value="taluk">Taluk Boundary</option>
                 </select>
             </div>
         </div>
@@ -360,7 +363,6 @@
             </div>
         </div>
 
-        <!-- NEW: File Upload Section -->
         <div class="form-group">
             <label>Or Attach File</label>
             <input type="file" id="fileInput" accept=".json,.geojson" style="display: none;"
@@ -399,15 +401,9 @@
             reader.readAsText(file);
         }
 
-        function clearInput() {
-            document.getElementById("geojsonInput").value = "";
-            const status = document.getElementById("status");
-            status.style.display = "none";
-        }
-
         async function deleteLayer() {
             const layer = document.getElementById("layer").value;
-            const confirmMsg = `Are you sure you want to PERMANENTLY delete the ${layer} layer from disk?`;
+            const confirmMsg = `Are you sure you want to PERMANENTLY delete the ${layer} layer?`;
 
             if (!confirm(confirmMsg)) return;
 
@@ -432,7 +428,6 @@
         async function updateMap() {
             const text = document.getElementById("geojsonInput").value;
             const layer = document.getElementById("layer").value;
-            const status = document.getElementById("status");
 
             if (!text.trim()) {
                 showStatus("Please enter GeoJSON data", "error");
@@ -441,7 +436,6 @@
 
             try {
                 const geojson = JSON.parse(text);
-
                 showStatus("Processing update...", "success");
 
                 const response = await fetch("/api/geojson", {
@@ -468,12 +462,7 @@
             const status = document.getElementById("status");
             status.innerHTML = message;
             status.className = type === "success" ? "status-success" : "status-error";
-
-            if (type === "success") {
-                setTimeout(() => {
-                    // status.style.display = "none";
-                }, 5000);
-            }
+            status.style.display = "flex";
         }
     </script>
 

@@ -4,25 +4,33 @@ import { Server } from "socket.io";
 import cors from "cors";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
 
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const httpServer = createServer(app);
 
+// Configure Socket.io with robust CORS for Render
 const io = new Server(httpServer, {
     cors: {
-        origin: "*",
-        methods: ["GET", "POST", "DELETE"]
+        origin: process.env.FRONTEND_URL || "*",
+        methods: ["GET", "POST", "DELETE"],
+        credentials: true
     }
 });
 
+app.set("trust proxy", 1); // Trust Render's proxy for HTTPS
 app.use(cors());
 app.use(express.json({ limit: "50mb" }));
-app.use(express.static("public"));
+app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/admin", (req, res) => {
-    res.sendFile(process.cwd() + "/public/admin.html");
+    res.sendFile(path.join(__dirname, "public", "admin.html"));
 });
 
 /* ---------------- DATABASE ---------------- */
@@ -44,11 +52,12 @@ async function syncFromDB() {
         const layers = await Layer.find({});
         mapLayers = {};
 
-        layers.forEach(l => {
+        const names = layers.map(l => {
             mapLayers[l.name] = l.geojson;
+            return l.name;
         });
 
-        console.log("✅ Synced from DB");
+        console.log("✅ SYNC COMPLETE. Layers in DB:", names);
         io.emit("geojson-update", mapLayers);
     } catch (err) {
         console.error("Sync error:", err);
@@ -79,8 +88,17 @@ app.post("/api/geojson", async (req, res) => {
         return res.status(400).json({ error: "Layer & GeoJSON required" });
     }
 
-    if (geojson.type !== "FeatureCollection") {
-        return res.status(400).json({ error: "Invalid GeoJSON" });
+    if (!geojson.type || geojson.type.toLowerCase() !== "featurecollection") {
+        return res.status(400).json({ error: "Invalid GeoJSON. Must be a FeatureCollection." });
+    }
+
+    // Deeply normalize GeoJSON types
+    geojson.type = "FeatureCollection";
+    if (Array.isArray(geojson.features)) {
+        geojson.features = geojson.features.map(f => ({
+            ...f,
+            type: "Feature"
+        }));
     }
 
     try {
@@ -91,11 +109,13 @@ app.post("/api/geojson", async (req, res) => {
         );
 
         mapLayers[layer] = geojson;
+        console.log(`💾 LAYER UPDATED: ${layer} (${geojson.features?.length || 0} features)`);
 
         io.emit("geojson-update", mapLayers);
 
         res.json({ message: "Updated" });
     } catch (err) {
+        console.error("Update error:", err);
         res.status(500).json({ error: "DB error" });
     }
 });
