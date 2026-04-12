@@ -15,8 +15,9 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const httpServer = createServer(app);
 
-// Configure Socket.io with robust CORS for Render
+// Configure Socket.io with robust CORS and large buffer size for GeoJSON
 const io = new Server(httpServer, {
+    maxHttpBufferSize: 1e8, // 100MB to handle large spatial data
     cors: {
         origin: process.env.FRONTEND_URL || "*",
         methods: ["GET", "POST", "DELETE"],
@@ -24,9 +25,9 @@ const io = new Server(httpServer, {
     }
 });
 
-app.set("trust proxy", 1); // Trust Render's proxy for HTTPS
+app.set("trust proxy", 1);
 app.use(cors());
-app.use(express.json({ limit: "50mb" }));
+app.use(express.json({ limit: "100mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/admin", (req, res) => {
@@ -57,7 +58,8 @@ async function syncFromDB() {
             return l.name;
         });
 
-        console.log("✅ SYNC COMPLETE. Layers in DB:", names);
+        const dataSize = JSON.stringify(mapLayers).length / (1024 * 1024);
+        console.log(`✅ SYNC COMPLETE. Layers: ${names.join(", ")} (${dataSize.toFixed(2)} MB)`);
         io.emit("geojson-update", mapLayers);
     } catch (err) {
         console.error("Sync error:", err);
@@ -138,7 +140,8 @@ app.delete("/api/geojson/:layer", async (req, res) => {
 /* ---------------- SOCKET ---------------- */
 
 io.on("connection", (socket) => {
-    console.log("Client connected:", socket.id);
+    const size = JSON.stringify(mapLayers).length / (1024 * 1024);
+    console.log(`Client connected: ${socket.id} | Sending ${size.toFixed(2)} MB`);
     socket.emit("geojson-update", mapLayers);
 });
 
