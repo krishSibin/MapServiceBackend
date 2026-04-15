@@ -16,17 +16,30 @@ const app = express();
 const httpServer = createServer(app);
 
 // Configure Socket.io with robust CORS and large buffer size for GeoJSON
+const allowedOrigins = [
+    ...(process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(",") : []),
+    "https://nexira-spatial-map-service.vercel.app",
+    "http://localhost:5173",
+    "http://localhost:3000"
+].map(u => u.trim()).filter(Boolean);
+
 const io = new Server(httpServer, {
     maxHttpBufferSize: 1e8, // 100MB to handle large spatial data
     cors: {
-        origin: process.env.FRONTEND_URL || "*",
+        origin: allowedOrigins,
         methods: ["GET", "POST", "DELETE"],
         credentials: true
-    }
+    },
+    allowEIO3: true,
+    transports: ['websocket', 'polling']
 });
 
 app.set("trust proxy", 1);
-app.use(cors());
+app.use(cors({
+    origin: allowedOrigins,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+}));
 app.use(express.json({ limit: "100mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
