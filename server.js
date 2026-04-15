@@ -52,7 +52,8 @@ app.get("/admin", (req, res) => {
 const MONGO_URI = process.env.MONGODB_URI;
 mongoose.set("bufferCommands", false);
 
-let mapLayers = {}; // ✅ dynamic
+let mapLayers = {};
+let isBooted = false; // ✅ Track if initial DB sync is done
 
 const layerSchema = new mongoose.Schema({
     name: { type: String, required: true, unique: true },
@@ -73,6 +74,7 @@ async function syncFromDB() {
 
         const dataSize = JSON.stringify(mapLayers).length / (1024 * 1024);
         console.log(`✅ SYNC COMPLETE. Layers: ${names.join(", ")} (${dataSize.toFixed(2)} MB)`);
+        isBooted = true; // ✅ Signal readiness
         io.emit("geojson-update", mapLayers);
     } catch (err) {
         console.error("Sync error:", err);
@@ -93,6 +95,9 @@ if (!MONGO_URI) {
 /* ---------------- API ---------------- */
 
 app.get("/api/geojson", (req, res) => {
+    if (!isBooted) {
+        return res.status(503).json({ error: "Server is initializing spatial data core..." });
+    }
     res.json(mapLayers);
 });
 
@@ -153,6 +158,10 @@ app.delete("/api/geojson/:layer", async (req, res) => {
 /* ---------------- SOCKET ---------------- */
 
 io.on("connection", (socket) => {
+    if (!isBooted) {
+        console.log(`⏳ Client ${socket.id} connected, but server is still booting...`);
+        return;
+    }
     const size = JSON.stringify(mapLayers).length / (1024 * 1024);
     console.log(`Client connected: ${socket.id} | Sending ${size.toFixed(2)} MB`);
     socket.emit("geojson-update", mapLayers);
