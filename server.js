@@ -6,6 +6,7 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
+import cartoRouter, { isCartoConfigured } from "./carto.js";
 
 dotenv.config();
 
@@ -90,6 +91,16 @@ if (!MONGO_URI) {
             syncFromDB();
         })
         .catch(err => console.error(err));
+}
+
+/* ---------------- CARTO ---------------- */
+
+app.use("/api/carto", cartoRouter);
+
+if (isCartoConfigured()) {
+    console.log("✅ CARTO Maps API enabled");
+} else {
+    console.warn("⚠️  CARTO_ACCESS_TOKEN missing — /api/carto routes will return 503");
 }
 
 /* ---------------- API ---------------- */
